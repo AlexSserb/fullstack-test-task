@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi import File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from starlette import status
+from src.database import lifespan
 from src.schemas import AlertItem, FileItem, FileUpdate
 from src.service import (
     create_file,
@@ -14,8 +14,9 @@ from src.service import (
     STORAGE_DIR,
 )
 from src.tasks import scan_file_for_threats
+from starlette import status
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -40,8 +41,8 @@ async def list_alerts_view():
 
 @app.post("/files", response_model=FileItem, status_code=201)
 async def create_file_view(
-    title: str = Form(...),
-    file: UploadFile = File(...),
+        title: str = Form(...),
+        file: UploadFile = File(...),
 ):
     file_item = await create_file(title=title, upload_file=file)
     scan_file_for_threats.delay(file_item.id)
@@ -55,8 +56,8 @@ async def get_file_view(file_id: str):
 
 @app.patch("/files/{file_id}", response_model=FileItem)
 async def update_file_view(
-    file_id: str,
-    payload: FileUpdate,
+        file_id: str,
+        payload: FileUpdate,
 ):
     return await update_file(file_id=file_id, title=payload.title)
 
