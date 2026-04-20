@@ -1,5 +1,6 @@
 """Бизнес-логика для управления файлами: загрузка, чтение, обновление и удаление."""
 
+import logging
 import mimetypes
 from pathlib import Path
 from uuid import uuid4
@@ -11,6 +12,8 @@ from src.config import STORAGE_DIR
 from src.models import Alert, ProcessingStatus, StoredFile
 from src.repositories.alert_repo import AlertRepository
 from src.repositories.file_repo import FileRepository
+
+logger = logging.getLogger(__name__)
 
 
 async def list_files(session: AsyncSession) -> list[StoredFile]:
@@ -27,6 +30,7 @@ async def get_file(session: AsyncSession, file_id: str) -> StoredFile:
     """Возвращает файл по идентификатору или выбрасывает 404."""
     file_item = await FileRepository(session).get_by_id(file_id)
     if not file_item:
+        logger.warning("File not found: %s", file_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     return file_item
 
@@ -35,6 +39,7 @@ async def create_file(session: AsyncSession, title: str, upload_file: UploadFile
     """Сохраняет загруженный файл на диск и создаёт запись в базе данных."""
     content = await upload_file.read()
     if not content:
+        logger.warning("Upload rejected: empty file (title=%s)", title)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty")
 
     file_id = str(uuid4())
@@ -42,6 +47,7 @@ async def create_file(session: AsyncSession, title: str, upload_file: UploadFile
     stored_name = f"{file_id}{suffix}"
     stored_path = STORAGE_DIR / stored_name
     stored_path.write_bytes(content)
+    logger.info("File written to disk: %s (%d bytes)", stored_name, len(content))
 
     file_item = StoredFile(
         id=file_id,
@@ -52,7 +58,9 @@ async def create_file(session: AsyncSession, title: str, upload_file: UploadFile
         size=len(content),
         processing_status=ProcessingStatus.UPLOADED,
     )
-    return await FileRepository(session).save(file_item)
+    saved = await FileRepository(session).save(file_item)
+    logger.info("File record created: id=%s title=%r", saved.id, saved.title)
+    return saved
 
 
 async def update_file(session: AsyncSession, file_id: str, title: str) -> StoredFile:
@@ -60,9 +68,12 @@ async def update_file(session: AsyncSession, file_id: str, title: str) -> Stored
     repo = FileRepository(session)
     file_item = await repo.get_by_id(file_id)
     if not file_item:
+        logger.warning("Update rejected: file not found: %s", file_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     file_item.title = title
-    return await repo.save(file_item)
+    saved = await repo.save(file_item)
+    logger.info("File updated: id=%s new_title=%r", file_id, title)
+    return saved
 
 
 async def delete_file(session: AsyncSession, file_id: str) -> None:
@@ -70,8 +81,11 @@ async def delete_file(session: AsyncSession, file_id: str) -> None:
     repo = FileRepository(session)
     file_item = await repo.get_by_id(file_id)
     if not file_item:
+        logger.warning("Delete rejected: file not found: %s", file_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     stored_path = STORAGE_DIR / file_item.stored_name
     if stored_path.exists():
         stored_path.unlink()
+        logger.info("File deleted from disk: %s", file_item.stored_name)
     await repo.delete(file_item)
+    logger.info("File record deleted: id=%s", file_id)
