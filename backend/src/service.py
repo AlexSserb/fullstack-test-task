@@ -3,40 +3,37 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select
-from src.database import get_session_maker
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.models import Alert, StoredFile
+from src.repositories.alert_repo import AlertRepository
+from src.repositories.file_repo import FileRepository
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STORAGE_DIR = BASE_DIR / "storage" / "files"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-async def list_files() -> list[StoredFile]:
-    async with get_session_maker()() as session:
-        result = await session.execute(
-            select(StoredFile).order_by(StoredFile.created_at.desc())
+async def list_files(session: AsyncSession) -> list[StoredFile]:
+    return await FileRepository(session).list_all()
+
+
+async def list_alerts(session: AsyncSession) -> list[Alert]:
+    return await AlertRepository(session).list_all()
+
+
+async def get_file(session: AsyncSession, file_id: str) -> StoredFile:
+    file_item = await FileRepository(session).get_by_id(file_id)
+    if not file_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
-        return list(result.scalars().all())
+    return file_item
 
 
-async def list_alerts() -> list[Alert]:
-    async with get_session_maker()() as session:
-        result = await session.execute(select(Alert).order_by(Alert.created_at.desc()))
-        return list(result.scalars().all())
-
-
-async def get_file(file_id: str) -> StoredFile:
-    async with get_session_maker()() as session:
-        file_item = await session.get(StoredFile, file_id)
-        if not file_item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
-            )
-        return file_item
-
-
-async def create_file(title: str, upload_file: UploadFile) -> StoredFile:
+async def create_file(
+    session: AsyncSession, title: str, upload_file: UploadFile
+) -> StoredFile:
     content = await upload_file.read()
     if not content:
         raise HTTPException(
@@ -54,60 +51,36 @@ async def create_file(title: str, upload_file: UploadFile) -> StoredFile:
         title=title,
         original_name=upload_file.filename or stored_name,
         stored_name=stored_name,
-        mime_type=upload_file.content_type
-                  or mimetypes.guess_type(stored_name)[0]
-                  or "application/octet-stream",
+        mime_type=(
+            upload_file.content_type
+            or mimetypes.guess_type(stored_name)[0]
+            or "application/octet-stream"
+        ),
         size=len(content),
         processing_status="uploaded",
     )
-    async with get_session_maker()() as session:
-        session.add(file_item)
-        await session.commit()
-        await session.refresh(file_item)
-    return file_item
+    return await FileRepository(session).save(file_item)
 
 
-async def update_file(file_id: str, title: str) -> StoredFile:
-    async with get_session_maker()() as session:
-        file_item = await session.get(StoredFile, file_id)
-        if not file_item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
-            )
-        file_item.title = title
-        await session.commit()
-        await session.refresh(file_item)
-        return file_item
-
-
-async def delete_file(file_id: str) -> None:
-    async with get_session_maker()() as session:
-        file_item = await session.get(StoredFile, file_id)
-        if not file_item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
-            )
-        stored_path = STORAGE_DIR / file_item.stored_name
-        if stored_path.exists():
-            stored_path.unlink()
-        await session.delete(file_item)
-        await session.commit()
-
-
-async def get_file_path(file_id: str) -> tuple[StoredFile, Path]:
-    file_item = await get_file(file_id)
-    stored_path = STORAGE_DIR / file_item.stored_name
-    if not stored_path.exists():
+async def update_file(session: AsyncSession, file_id: str, title: str) -> StoredFile:
+    repo = FileRepository(session)
+    file_item = await repo.get_by_id(file_id)
+    if not file_item:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
-    return file_item, stored_path
+    file_item.title = title
+    return await repo.save(file_item)
 
 
-async def create_alert(file_id: str, level: str, message: str) -> Alert:
-    alert = Alert(file_id=file_id, level=level, message=message)
-    async with get_session_maker()() as session:
-        session.add(alert)
-        await session.commit()
-        await session.refresh(alert)
-        return alert
+async def delete_file(session: AsyncSession, file_id: str) -> None:
+    repo = FileRepository(session)
+    file_item = await repo.get_by_id(file_id)
+    if not file_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        )
+    stored_path = STORAGE_DIR / file_item.stored_name
+    if stored_path.exists():
+        stored_path.unlink()
+    await repo.delete(file_item)

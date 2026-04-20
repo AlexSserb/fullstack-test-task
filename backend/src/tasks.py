@@ -4,7 +4,9 @@ from pathlib import Path
 from celery import Celery
 from src.config import get_settings
 from src.database import get_session_maker
-from src.models import Alert, StoredFile
+from src.models import Alert
+from src.repositories.alert_repo import AlertRepository
+from src.repositories.file_repo import FileRepository
 from src.service import STORAGE_DIR
 
 _worker_loop: asyncio.AbstractEventLoop | None = None
@@ -26,7 +28,8 @@ celery_app = Celery(
 
 async def _scan_file_for_threats(file_id: str) -> None:
     async with get_session_maker()() as session:
-        file_item = await session.get(StoredFile, file_id)
+        repo = FileRepository(session)
+        file_item = await repo.get_by_id(file_id)
         if not file_item:
             return
 
@@ -49,14 +52,15 @@ async def _scan_file_for_threats(file_id: str) -> None:
         file_item.scan_status = "suspicious" if reasons else "clean"
         file_item.scan_details = ", ".join(reasons) if reasons else "no threats found"
         file_item.requires_attention = bool(reasons)
-        await session.commit()
+        await repo.save(file_item)
 
     extract_file_metadata.delay(file_id)
 
 
 async def _extract_file_metadata(file_id: str) -> None:
     async with get_session_maker()() as session:
-        file_item = await session.get(StoredFile, file_id)
+        repo = FileRepository(session)
+        file_item = await repo.get_by_id(file_id)
         if not file_item:
             return
 
@@ -65,7 +69,7 @@ async def _extract_file_metadata(file_id: str) -> None:
             file_item.processing_status = "failed"
             file_item.scan_status = file_item.scan_status or "failed"
             file_item.scan_details = "stored file not found during metadata extraction"
-            await session.commit()
+            await repo.save(file_item)
             send_file_alert.delay(file_id)
             return
 
@@ -85,14 +89,14 @@ async def _extract_file_metadata(file_id: str) -> None:
 
         file_item.metadata_json = metadata
         file_item.processing_status = "processed"
-        await session.commit()
+        await repo.save(file_item)
 
     send_file_alert.delay(file_id)
 
 
 async def _send_file_alert(file_id: str) -> None:
     async with get_session_maker()() as session:
-        file_item = await session.get(StoredFile, file_id)
+        file_item = await FileRepository(session).get_by_id(file_id)
         if not file_item:
             return
 
@@ -111,8 +115,7 @@ async def _send_file_alert(file_id: str) -> None:
                 file_id=file_id, level="info", message="File processed successfully"
             )
 
-        session.add(alert)
-        await session.commit()
+        await AlertRepository(session).save(alert)
 
 
 @celery_app.task
