@@ -5,20 +5,17 @@ from uuid import uuid4
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models import Alert, StoredFile
+from src.config import STORAGE_DIR
+from src.models import ProcessingStatus, StoredFile
 from src.repositories.alert_repo import AlertRepository
 from src.repositories.file_repo import FileRepository
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-STORAGE_DIR = BASE_DIR / "storage" / "files"
-STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 async def list_files(session: AsyncSession) -> list[StoredFile]:
     return await FileRepository(session).list_all()
 
 
-async def list_alerts(session: AsyncSession) -> list[Alert]:
+async def list_alerts(session: AsyncSession):
     return await AlertRepository(session).list_all()
 
 
@@ -57,7 +54,7 @@ async def create_file(
             or "application/octet-stream"
         ),
         size=len(content),
-        processing_status="uploaded",
+        processing_status=ProcessingStatus.UPLOADED,
     )
     return await FileRepository(session).save(file_item)
 

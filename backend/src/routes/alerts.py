@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_session
 from src.schemas import AlertItem
-from src.service import list_alerts
+from src.services.file_service import list_alerts
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 

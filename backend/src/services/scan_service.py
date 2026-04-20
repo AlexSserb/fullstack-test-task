@@ -2,10 +2,10 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models import Alert
+from src.config import STORAGE_DIR
+from src.models import Alert, AlertLevel, ProcessingStatus, ScanStatus
 from src.repositories.alert_repo import AlertRepository
 from src.repositories.file_repo import FileRepository
-from src.service import STORAGE_DIR
 
 
 async def scan_file(session: AsyncSession, file_id: str) -> None:
@@ -14,7 +14,7 @@ async def scan_file(session: AsyncSession, file_id: str) -> None:
     if not file_item:
         return
 
-    file_item.processing_status = "processing"
+    file_item.processing_status = ProcessingStatus.PROCESSING
     reasons: list[str] = []
     extension = Path(file_item.original_name).suffix.lower()
 
@@ -30,7 +30,7 @@ async def scan_file(session: AsyncSession, file_id: str) -> None:
     }:
         reasons.append("pdf extension does not match mime type")
 
-    file_item.scan_status = "suspicious" if reasons else "clean"
+    file_item.scan_status = ScanStatus.SUSPICIOUS if reasons else ScanStatus.CLEAN
     file_item.scan_details = ", ".join(reasons) if reasons else "no threats found"
     file_item.requires_attention = bool(reasons)
     await repo.save(file_item)
@@ -44,8 +44,8 @@ async def extract_metadata(session: AsyncSession, file_id: str) -> None:
 
     stored_path = STORAGE_DIR / file_item.stored_name
     if not stored_path.exists():
-        file_item.processing_status = "failed"
-        file_item.scan_status = file_item.scan_status or "failed"
+        file_item.processing_status = ProcessingStatus.FAILED
+        file_item.scan_status = file_item.scan_status or ScanStatus.FAILED
         file_item.scan_details = "stored file not found during metadata extraction"
         await repo.save(file_item)
         return
@@ -65,7 +65,7 @@ async def extract_metadata(session: AsyncSession, file_id: str) -> None:
         metadata["approx_page_count"] = max(content.count(b"/Type /Page"), 1)
 
     file_item.metadata_json = metadata
-    file_item.processing_status = "processed"
+    file_item.processing_status = ProcessingStatus.PROCESSED
     await repo.save(file_item)
 
 
@@ -74,19 +74,21 @@ async def send_alert(session: AsyncSession, file_id: str) -> None:
     if not file_item:
         return
 
-    if file_item.processing_status == "failed":
+    if file_item.processing_status == ProcessingStatus.FAILED:
         alert = Alert(
-            file_id=file_id, level="critical", message="File processing failed"
+            file_id=file_id, level=AlertLevel.CRITICAL, message="File processing failed"
         )
     elif file_item.requires_attention:
         alert = Alert(
             file_id=file_id,
-            level="warning",
+            level=AlertLevel.WARNING,
             message=f"File requires attention: {file_item.scan_details}",
         )
     else:
         alert = Alert(
-            file_id=file_id, level="info", message="File processed successfully"
+            file_id=file_id,
+            level=AlertLevel.INFO,
+            message="File processed successfully",
         )
 
     await AlertRepository(session).save(alert)

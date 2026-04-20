@@ -3,10 +3,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from src.config import STORAGE_DIR
 from src.database import get_session
 from src.schemas import FileItem, FileUpdate
-from src.service import (
-    STORAGE_DIR,
+from src.services.file_service import (
     create_file,
     delete_file,
     get_file,
