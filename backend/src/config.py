@@ -1,3 +1,5 @@
+"""Настройки приложения и константы файловой системы."""
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -9,6 +11,8 @@ STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class Settings(BaseSettings):
+    """Настройки приложения, читаемые из переменных окружения и .env файла."""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     postgres_user: str = "postgres"
@@ -25,6 +29,7 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        """Формирует строку подключения к PostgreSQL через asyncpg."""
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.pgport}/{self.postgres_db}"
@@ -33,4 +38,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Возвращает кешированный экземпляр настроек приложения."""
     return Settings()

@@ -1,3 +1,5 @@
+"""Сервис проверки файлов на угрозы, извлечения метаданных и создания оповещений."""
+
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,7 @@ from src.repositories.file_repo import FileRepository
 
 
 async def scan_file(session: AsyncSession, file_id: str) -> None:
+    """Проверяет файл по базовым эвристикам и выставляет статус сканирования."""
     repo = FileRepository(session)
     file_item = await repo.get_by_id(file_id)
     if not file_item:
@@ -37,6 +40,7 @@ async def scan_file(session: AsyncSession, file_id: str) -> None:
 
 
 async def extract_metadata(session: AsyncSession, file_id: str) -> None:
+    """Извлекает технические метаданные файла и сохраняет их в поле metadata_json."""
     repo = FileRepository(session)
     file_item = await repo.get_by_id(file_id)
     if not file_item:
@@ -50,7 +54,7 @@ async def extract_metadata(session: AsyncSession, file_id: str) -> None:
         await repo.save(file_item)
         return
 
-    metadata = {
+    metadata: dict = {
         "extension": Path(file_item.original_name).suffix.lower(),
         "size_bytes": file_item.size,
         "mime_type": file_item.mime_type,
@@ -70,14 +74,13 @@ async def extract_metadata(session: AsyncSession, file_id: str) -> None:
 
 
 async def send_alert(session: AsyncSession, file_id: str) -> None:
+    """Создаёт оповещение по результатам обработки файла."""
     file_item = await FileRepository(session).get_by_id(file_id)
     if not file_item:
         return
 
     if file_item.processing_status == ProcessingStatus.FAILED:
-        alert = Alert(
-            file_id=file_id, level=AlertLevel.CRITICAL, message="File processing failed"
-        )
+        alert = Alert(file_id=file_id, level=AlertLevel.CRITICAL, message="File processing failed")
     elif file_item.requires_attention:
         alert = Alert(
             file_id=file_id,
@@ -85,10 +88,6 @@ async def send_alert(session: AsyncSession, file_id: str) -> None:
             message=f"File requires attention: {file_item.scan_details}",
         )
     else:
-        alert = Alert(
-            file_id=file_id,
-            level=AlertLevel.INFO,
-            message="File processed successfully",
-        )
+        alert = Alert(file_id=file_id, level=AlertLevel.INFO, message="File processed successfully")
 
     await AlertRepository(session).save(alert)

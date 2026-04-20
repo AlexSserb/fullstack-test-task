@@ -1,8 +1,10 @@
+"""Точка входа FastAPI-приложения: инициализация, middleware и подключение роутеров."""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.routes import alerts, files
 from src.database import lifespan
+from src.routes import alerts, files
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(

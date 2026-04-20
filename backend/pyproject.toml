@@ -24,3 +24,20 @@ dev = [
 
 [tool.ruff]
 exclude = ["migrations/versions"]
+line-length = 120
+indent-width = 4
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D203", # конфликт с D211
+    "D212", # конфликт с D213
+    "INP001",
+    "S105",
+    "PLW0603",
+    "RUF002", # ложное срабатывание - кириллица в docstring
+    "TC001",
+    "TC002",
+    "TC003",
+]
