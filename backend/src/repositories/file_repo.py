@@ -33,5 +33,5 @@ class FileRepository:
 
     async def delete(self, file_item: StoredFile) -> None:
         """Удаляет запись о файле из базы данных."""
-        await self.session.delete(file_item)
+        self.session.delete(file_item)
         await self.session.commit()
