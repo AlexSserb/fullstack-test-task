@@ -6,7 +6,7 @@ import logging
 from celery import Celery
 
 from src.config import get_settings
-from src.database import get_session_maker
+from src.database import get_worker_session_maker
 from src.services import scan_service
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ def scan_file_for_threats(file_id: str) -> None:
     try:
 
         async def _run() -> None:
-            async with get_session_maker()() as session:
+            async with get_worker_session_maker()() as session:
                 await scan_service.scan_file(session, file_id)
 
         asyncio.run(_run())
@@ -44,7 +44,7 @@ def extract_file_metadata(file_id: str) -> None:
     try:
 
         async def _run() -> None:
-            async with get_session_maker()() as session:
+            async with get_worker_session_maker()() as session:
                 await scan_service.extract_metadata(session, file_id)
 
         asyncio.run(_run())
@@ -62,7 +62,7 @@ def send_file_alert(file_id: str) -> None:
     try:
 
         async def _run() -> None:
-            async with get_session_maker()() as session:
+            async with get_worker_session_maker()() as session:
                 await scan_service.send_alert(session, file_id)
 
         asyncio.run(_run())

@@ -6,6 +6,7 @@ from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -50,3 +51,10 @@ async def get_session() -> AsyncGenerator[AsyncSession]:
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def get_worker_session_maker() -> async_sessionmaker[AsyncSession]:
+    """Создаёт фабрику сессий без пула соединений для использования в Celery-воркерах."""
+    s = get_settings()
+    engine = create_async_engine(s.database_url, poolclass=NullPool)
+    return async_sessionmaker(engine, expire_on_commit=False)
