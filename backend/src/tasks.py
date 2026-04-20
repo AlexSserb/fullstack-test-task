@@ -1,8 +1,7 @@
 """Celery-задачи для асинхронной обработки файлов в фоновом режиме."""
 
 import asyncio
-from collections.abc import Coroutine
-from typing import Any
+import logging
 
 from celery import Celery
 
@@ -10,17 +9,7 @@ from src.config import get_settings
 from src.database import get_session_maker
 from src.services import scan_service
 
-_worker_loop: asyncio.AbstractEventLoop | None = None
-
-
-def run_in_worker_loop(coroutine: Coroutine[Any, Any, None]) -> None:
-    """Выполняет корутину в постоянном event loop воркера Celery."""
-    global _worker_loop
-    if _worker_loop is None or _worker_loop.is_closed():
-        _worker_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(_worker_loop)
-    _worker_loop.run_until_complete(coroutine)
-
+logger = logging.getLogger(__name__)
 
 _settings = get_settings()
 celery_app = Celery(
@@ -33,33 +22,51 @@ celery_app = Celery(
 @celery_app.task
 def scan_file_for_threats(file_id: str) -> None:
     """Запускает проверку файла на угрозы и передаёт управление задаче извлечения метаданных."""
+    logger.info("Starting threat scan for file %s", file_id)
+    try:
 
-    async def _run() -> None:
-        async with get_session_maker()() as session:
-            await scan_service.scan_file(session, file_id)
-        extract_file_metadata.delay(file_id)
+        async def _run() -> None:
+            async with get_session_maker()() as session:
+                await scan_service.scan_file(session, file_id)
 
-    run_in_worker_loop(_run())
+        asyncio.run(_run())
+    except Exception:
+        logger.exception("Threat scan failed for file %s", file_id)
+        return
+    logger.info("Threat scan completed for file %s, queuing metadata extraction", file_id)
+    extract_file_metadata.delay(file_id)
 
 
 @celery_app.task
 def extract_file_metadata(file_id: str) -> None:
     """Извлекает метаданные файла и передаёт управление задаче отправки оповещения."""
+    logger.info("Starting metadata extraction for file %s", file_id)
+    try:
 
-    async def _run() -> None:
-        async with get_session_maker()() as session:
-            await scan_service.extract_metadata(session, file_id)
-        send_file_alert.delay(file_id)
+        async def _run() -> None:
+            async with get_session_maker()() as session:
+                await scan_service.extract_metadata(session, file_id)
 
-    run_in_worker_loop(_run())
+        asyncio.run(_run())
+    except Exception:
+        logger.exception("Metadata extraction failed for file %s", file_id)
+        return
+    logger.info("Metadata extraction completed for file %s, queuing alert", file_id)
+    send_file_alert.delay(file_id)
 
 
 @celery_app.task
 def send_file_alert(file_id: str) -> None:
     """Создаёт оповещение по результатам обработки файла."""
+    logger.info("Sending alert for file %s", file_id)
+    try:
 
-    async def _run() -> None:
-        async with get_session_maker()() as session:
-            await scan_service.send_alert(session, file_id)
+        async def _run() -> None:
+            async with get_session_maker()() as session:
+                await scan_service.send_alert(session, file_id)
 
-    run_in_worker_loop(_run())
+        asyncio.run(_run())
+    except Exception:
+        logger.exception("Alert sending failed for file %s", file_id)
+        return
+    logger.info("Alert sent for file %s", file_id)
