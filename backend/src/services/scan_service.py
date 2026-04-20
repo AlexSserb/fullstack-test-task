@@ -12,6 +12,9 @@ from src.repositories.file_repo import FileRepository
 
 logger = logging.getLogger(__name__)
 
+SUSPICIOUS_EXTENSIONS: frozenset[str] = frozenset({".exe", ".bat", ".cmd", ".sh", ".js"})
+MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
+
 
 async def scan_file(session: AsyncSession, file_id: str) -> None:
     """Проверяет файл по базовым эвристикам и выставляет статус сканирования."""
@@ -25,10 +28,10 @@ async def scan_file(session: AsyncSession, file_id: str) -> None:
     reasons: list[str] = []
     extension = Path(file_item.original_name).suffix.lower()
 
-    if extension in {".exe", ".bat", ".cmd", ".sh", ".js"}:
+    if extension in SUSPICIOUS_EXTENSIONS:
         reasons.append(f"suspicious extension {extension}")
 
-    if file_item.size > 10 * 1024 * 1024:
+    if file_item.size > MAX_FILE_SIZE_BYTES:
         reasons.append("file is larger than 10 MB")
 
     if extension == ".pdf" and file_item.mime_type not in {
