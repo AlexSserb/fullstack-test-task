@@ -14,3 +14,12 @@ dependencies = [
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.42.0",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.11",
+    "ty>=0.0.31",
+]
+
+[tool.ruff]
+exclude = ["migrations/versions"]
