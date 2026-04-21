@@ -1,9 +1,13 @@
+"""Pydantic-схемы для сериализации и валидации данных API."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
 
 class FileItem(BaseModel):
+    """Полное представление загруженного файла для ответов API."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -21,10 +25,14 @@ class FileItem(BaseModel):
 
 
 class FileUpdate(BaseModel):
+    """Данные для частичного обновления файла."""
+
     title: str
 
 
 class AlertItem(BaseModel):
+    """Представление оповещения для ответов API."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
