@@ -1,5 +1,6 @@
 """Бизнес-логика для управления файлами: загрузка, чтение, обновление и удаление."""
 
+import asyncio
 import logging
 import mimetypes
 from pathlib import Path
@@ -46,7 +47,8 @@ async def create_file(session: AsyncSession, title: str, upload_file: UploadFile
     suffix = Path(upload_file.filename or "").suffix
     stored_name = f"{file_id}{suffix}"
     stored_path = STORAGE_DIR / stored_name
-    stored_path.write_bytes(content)
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, stored_path.write_bytes, content)
     logger.info("File written to disk: %s (%d bytes)", stored_name, len(content))
 
     file_item = StoredFile(
