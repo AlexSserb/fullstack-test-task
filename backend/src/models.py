@@ -1,49 +1,81 @@
-from datetime import datetime
+"""ORM-модели базы данных и перечисления статусов."""
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, func
+from datetime import datetime
+from enum import StrEnum
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
+class ProcessingStatus(StrEnum):
+    """Статус обработки файла."""
+
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    FAILED = "failed"
+
+
+class ScanStatus(StrEnum):
+    """Результат антивирусной проверки файла."""
+
+    CLEAN = "clean"
+    SUSPICIOUS = "suspicious"
+    FAILED = "failed"
+
+
+class AlertLevel(StrEnum):
+    """Уровень серьёзности оповещения."""
+
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
 class Base(DeclarativeBase):
-    pass
+    """Базовый класс для всех ORM-моделей."""
 
 
 class StoredFile(Base):
+    """Файл, загруженный пользователем и сохранённый на диске."""
+
     __tablename__ = "files"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    stored_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
-    size: Mapped[int] = mapped_column(Integer, nullable=False)
-    processing_status: Mapped[str] = mapped_column(String(50), nullable=False, default="uploaded")
-    scan_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    scan_details: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    requires_attention: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    title: Mapped[str] = mapped_column(String(255))
+    original_name: Mapped[str] = mapped_column(String(255))
+    stored_name: Mapped[str] = mapped_column(String(255), unique=True)
+    mime_type: Mapped[str] = mapped_column(String(255))
+    size: Mapped[int] = mapped_column(Integer)
+    processing_status: Mapped[ProcessingStatus] = mapped_column(
+        String(50),
+        default=ProcessingStatus.UPLOADED,
+    )
+    scan_status: Mapped[ScanStatus | None] = mapped_column(String(50))
+    scan_details: Mapped[str | None] = mapped_column(String(500))
+    metadata_json: Mapped[dict | None] = mapped_column(JSON)
+    requires_attention: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
-        nullable=False,
     )
 
 
 class Alert(Base):
+    """Оповещение, созданное по результатам обработки файла."""
+
     __tablename__ = "alerts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("files.id"), nullable=False)
-    level: Mapped[str] = mapped_column(String(50), nullable=False)
-    message: Mapped[str] = mapped_column(String(500), nullable=False)
+    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("files.id"))
+    level: Mapped[AlertLevel] = mapped_column(String(50))
+    message: Mapped[str] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        nullable=False,
     )
